@@ -574,12 +574,14 @@ with tab2:
         
         st.markdown("---")
         st.markdown("#### Graph Statistics")
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
-            st.metric("Total Players", len(df_filtered))
+            st.metric("Total in Dataset", len(df))
         with col_b:
-            st.metric("Unique Positions", df_filtered['primary_position'].nunique())
+            st.metric("Displayed Players", len(df_filtered))
         with col_c:
+            st.metric("Unique Positions", df_filtered['primary_position'].nunique())
+        with col_d:
             if len(df_filtered) >= 2:
                 st.metric("Graph Nodes", G.number_of_nodes())
 
@@ -674,9 +676,9 @@ with tab3:
     st.markdown("---")
     st.markdown("#### Dataset Overview")
     
-    col5, col6, col7, col8 = st.columns(4)
-    with col5:
-        st.metric("Total Players", len(df))
+    col6, col7, col8 = st.columns(3)
+    # with col5:
+    #     st.metric("Total Players", len(df))
     with col6:
         st.metric("Unique Positions", df['primary_position'].nunique())
     with col7:
