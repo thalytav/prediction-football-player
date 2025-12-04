@@ -70,17 +70,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- JUDUL & INTRO ---
-st.markdown('<div class="main-header">⚽ AI Football Scout: Position Predictor</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">AI Football Scout: Position Predictor</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Prediksi posisi ideal pemain sepak bola menggunakan <strong>Graph Database Embeddings</strong>, <strong>Advanced Feature Engineering</strong>, dan <strong>Random Forest</strong></div>', unsafe_allow_html=True)
 
 # Display model info in sidebar with better styling
 try:
     with open('model_config.json', 'r') as f:
         config = json.load(f)
-    st.sidebar.markdown("### 📊 Model Performance")
+    st.sidebar.markdown("### Model Performance")
     st.sidebar.markdown(f"""
     <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 10px; color: white;'>
-        <div style='font-size: 1.2rem; font-weight: bold;'>✅ Accuracy</div>
+        <div style='font-size: 1.2rem; font-weight: bold;'>Accuracy</div>
         <div style='font-size: 2rem; font-weight: bold;'>{config['accuracy']:.2%}</div>
         <div style='font-size: 0.9rem; margin-top: 0.5rem;'>CV Score: {config['cv_score']:.2%}</div>
     </div>
@@ -129,7 +129,7 @@ def load_saved_model():
         
         return model, le, scaler, df, config
     except FileNotFoundError as e:
-        st.error(f"❌ Model files not found! Please run 'python train_model.py' first.")
+        st.error(f"Model files not found! Please run 'python train_model.py' first.")
         st.error(f"Missing file: {e.filename}")
         st.stop()
 
@@ -141,18 +141,18 @@ stats_cols = config['stats_cols']
 
 # --- SIDEBAR: INPUT STATISTIK ---
 st.sidebar.markdown("---")
-st.sidebar.header("🎛️ Input Atribut Pemain")
+st.sidebar.header("Input Atribut Pemain")
 st.sidebar.markdown("Sesuaikan statistik pemain di bawah ini untuk mendapatkan prediksi posisi:")
 
 def user_input_features():
-    st.sidebar.markdown("#### 🏃 Atribut Fisik")
+    st.sidebar.markdown("#### Atribut Fisik")
     age = st.sidebar.slider('Usia (Age)', 15, 45, 25)
     acc = st.sidebar.slider('Acceleration', 0, 100, 75)
     sprint = st.sidebar.slider('Sprint Speed', 0, 100, 75)
     stamina = st.sidebar.slider('Stamina', 0, 100, 70)
     strength = st.sidebar.slider('Strength', 0, 100, 70)
     
-    st.sidebar.markdown("#### ⚽ Atribut Teknik")
+    st.sidebar.markdown("#### Atribut Teknik")
     dribble = st.sidebar.slider('Dribbling', 0, 100, 70)
     passing = st.sidebar.slider('Short Passing', 0, 100, 70)
     finish = st.sidebar.slider('Finishing', 0, 100, 60)
@@ -175,7 +175,7 @@ input_df = user_input_features()
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.markdown("### 🔍 Data Input Pemain")
+    st.markdown("### Data Input Pemain")
     
     # Display input in a nice table format
     input_display = input_df.T
@@ -190,7 +190,7 @@ with col1:
         st.dataframe(input_display.iloc[4:], use_container_width=True)
 
     st.markdown("---")
-    if st.button('🚀 Prediksi Posisi Sekarang', use_container_width=True):
+    if st.button('Prediksi Posisi Sekarang', use_container_width=True):
         # === FEATURE ENGINEERING (SAMA DENGAN TRAINING!) ===
         
         # 1. Cari Pemain Mirip berdasarkan stats
@@ -258,7 +258,7 @@ with col1:
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("### 🧠 Logic Reasoning")
+        st.markdown("### Logic Reasoning")
         st.info(f"""
         **Bagaimana sistem membuat prediksi ini?**
         
@@ -274,21 +274,21 @@ with col1:
         """)
         
         # Show feature scores
-        st.markdown("### 📈 Feature Scores Breakdown")
+        st.markdown("### Feature Scores Breakdown")
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            st.metric("⚔️ Attack Score", f"{attack_score:.1f}/100", help="Finishing + Dribbling + Sprint Speed")
-            st.metric("🛡️ Defense Score", f"{defense_score:.1f}/100", help="Strength + Stamina")
+            st.metric("Attack Score", f"{attack_score:.1f}/100", help="Finishing + Dribbling + Sprint Speed")
+            st.metric("Defense Score", f"{defense_score:.1f}/100", help="Strength + Stamina")
         with col_b:
-            st.metric("🎯 Midfield Score", f"{midfield_score:.1f}/100", help="Short Passing + Stamina")
-            st.metric("⚡ Speed Score", f"{speed_score:.1f}/100", help="Acceleration + Sprint Speed")
+            st.metric("Midfield Score", f"{midfield_score:.1f}/100", help="Short Passing + Stamina")
+            st.metric("Speed Score", f"{speed_score:.1f}/100", help="Acceleration + Sprint Speed")
         with col_c:
-            st.metric("🎨 Technical Score", f"{technical_score:.1f}/100", help="Dribbling + Short Passing")
-            st.metric("👤 Similar Player", closest_player['full_name'][:20], help=f"Posisi: {closest_player['primary_position']}")
+            st.metric("Technical Score", f"{technical_score:.1f}/100", help="Dribbling + Short Passing")
+            st.metric("Similar Player", closest_player['full_name'][:20], help=f"Posisi: {closest_player['primary_position']}")
 
         # --- VISUALISASI PROBABILITAS ---
         st.markdown("---")
-        st.markdown("### 📊 Confidence Level Model")
+        st.markdown("### Confidence Level Model")
         st.caption("Probabilitas untuk 5 posisi teratas berdasarkan analisis model")
         
         proba_df = pd.DataFrame(prediction_proba, columns=le.classes_).T
@@ -315,12 +315,12 @@ with col1:
         st.pyplot(fig)
 
 with col2:
-    st.markdown("### ℹ️ Informasi Sistem")
+    st.markdown("### Informasi Sistem")
     
     # Model performance in a card
     st.markdown(f"""
     <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 1rem;'>
-        <div style='font-size: 1.1rem; font-weight: bold;'>🤖 Model Information</div>
+        <div style='font-size: 1.1rem; font-weight: bold;'>Model Information</div>
         <hr style='border-color: rgba(255,255,255,0.3); margin: 0.5rem 0;'>
         <div style='margin: 0.5rem 0;'><strong>Algorithm:</strong> Random Forest</div>
         <div style='margin: 0.5rem 0;'><strong>Test Accuracy:</strong> {config['accuracy']:.2%}</div>
@@ -329,27 +329,27 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 📖 Kamus Posisi")
+    st.markdown("### Kamus Posisi")
     st.caption("Daftar lengkap posisi yang dikenali sistem")
     
-    # Kelompokkan manual biar UI-nya cakep
-    with st.expander("🥅 Kiper & Bek (Defenders)", expanded=False):
+    # Kelompokkan manual UI-nya
+    with st.expander("Kiper & Bek (Defenders)", expanded=False):
         st.markdown("- **GK:** Goalkeeper")
         st.markdown("- **CB:** Center Back")
         st.markdown("- **LB/RB:** Left/Right Back")
         st.markdown("- **LWB/RWB:** Left/Right Wing Back")
 
-    with st.expander("🏃 Gelandang (Midfielders)", expanded=False):
+    with st.expander("Gelandang (Midfielders)", expanded=False):
         st.markdown("- **CDM:** Central Defensive Midfielder")
         st.markdown("- **CM:** Central Midfielder")
         st.markdown("- **CAM:** Central Attacking Midfielder")
         st.markdown("- **LM/RM:** Left/Right Midfielder")
 
-    with st.expander("⚽ Penyerang (Attackers)", expanded=False):
+    with st.expander("Penyerang (Attackers)", expanded=False):
         st.markdown("- **LW/RW:** Left/Right Winger")
         st.markdown("- **CF:** Center Forward")
         st.markdown("- **ST:** Striker")
     
     # Footer info
     st.markdown("---")
-    st.caption("💡 **Tips:** Sesuaikan slider di sidebar untuk mengeksplorasi berbagai profil pemain dan melihat bagaimana perubahan atribut mempengaruhi prediksi posisi.")
+    st.caption("**Tips:** Sesuaikan slider di sidebar untuk mengeksplorasi berbagai profil pemain dan melihat bagaimana perubahan atribut mempengaruhi prediksi posisi.")
