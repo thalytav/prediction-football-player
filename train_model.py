@@ -14,7 +14,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler
 from imblearn.over_sampling import SMOTE
 
 # ==================================================
-# 🚀 CONFIGURATION
+# CONFIGURATION
 # ==================================================
 USE_GPU = True       # Set True to use PyTorch GPU acceleration
 FAST_MODE = False     # Set True for faster training (3 folds instead of 5)
@@ -28,29 +28,29 @@ if USE_GPU:
         if torch.cuda.is_available():
             GPU_AVAILABLE = True
             device = torch.device('cuda')
-            print(f"✅ GPU detected: {torch.cuda.get_device_name(0)}")
+            print(f" GPU detected: {torch.cuda.get_device_name(0)}")
             print(f"   CUDA Version: {torch.version.cuda}")
             print(f"   Using PyTorch {torch.__version__}")
         else:
-            print("⚠️  PyTorch installed but no CUDA GPU detected")
+            print("  PyTorch installed but no CUDA GPU detected")
             device = torch.device('cpu')
     except ImportError:
-        print("⚠️  GPU mode enabled but PyTorch not installed")
-        print("    📦 Install with: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118")
-        print("\n    💡 Or for RTX 3060 (CUDA 12.x):")
+        print("  GPU mode enabled but PyTorch not installed")
+        print("     Install with: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118")
+        print("\n     Or for RTX 3060 (CUDA 12.x):")
         print("    conda install -c rapidsai -c conda-forge -c nvidia rapids=24.12 python=3.11 cuda-version=12.0")
         GPU_AVAILABLE = False
         USE_GPU = False
         device = torch.device('cpu')
 else:
     GPU_AVAILABLE = False
-    print("💻 Running in CPU mode (set USE_GPU=True for GPU acceleration)")
+    print(" Running in CPU mode (set USE_GPU=True for GPU acceleration)")
     device = None
 
 if FAST_MODE:
-    print("⚡ FAST MODE enabled (3-fold CV, reduced param grid)")
+    print(" FAST MODE enabled (3-fold CV, reduced param grid)")
 else:
-    print("🐢 FULL MODE (5-fold CV, extensive param grid)")
+    print(" FULL MODE (5-fold CV, extensive param grid)")
 
 print("="*60)
 start_time = time.time()
@@ -163,7 +163,7 @@ print(f"\n=== HASIL KOMPARASI MODEL ({cv_folds}-Fold CV) ===")
 
 # Always use sklearn (GPU doesn't help much for tree-based models in sklearn)
 # But we optimize with n_jobs=-1 to use all CPU cores
-print("💻 Using optimized CPU-based models (scikit-learn with parallel processing)")
+print(" Using optimized CPU-based models (scikit-learn with parallel processing)")
 print(f"   Available CPU cores: {joblib.cpu_count()}")
 if GPU_AVAILABLE:
     print(f"   GPU: {torch.cuda.get_device_name(0)} (for neural networks if needed)")
@@ -213,7 +213,7 @@ for name, model in models.items():
     cv_results = cross_val_score(model, X_resampled, y_resampled, cv=kfold, scoring='accuracy')
     results.append(cv_results)
     names.append(name)
-    print(f"  ✓ {name}: Akurasi {cv_results.mean():.4f} (+/- {cv_results.std():.4f})")
+    print(f"   {name}: Akurasi {cv_results.mean():.4f} (+/- {cv_results.std():.4f})")
 
 # Visualisasi Perbandingan
 plt.figure(figsize=(12, 6))
@@ -224,7 +224,7 @@ plt.xticks(rotation=15, ha='right')
 plt.grid(axis='y', alpha=0.3)
 plt.tight_layout()
 plt.savefig('model_comparison_plot.png', dpi=150)
-print("\n📊 Plot tersimpan sebagai 'model_comparison_plot.png'")
+print("\n Plot tersimpan sebagai 'model_comparison_plot.png'")
 
 # --- 6. HYPERPARAMETER TUNING UNTUK BEST MODEL ---
 print("\n=== HYPERPARAMETER TUNING (Random Forest) ===")
@@ -238,7 +238,7 @@ if FAST_MODE:
         'max_features': ['sqrt']
     }
     tuning_cv_folds = 3
-    print("⚡ FAST MODE: Using reduced parameter grid (3-fold CV)")
+    print(" FAST MODE: Using reduced parameter grid (3-fold CV)")
 else:
     # FULL MODE: Complete parameter grid
     param_grid = {
@@ -249,7 +249,7 @@ else:
         'max_features': ['sqrt', 'log2']
     }
     tuning_cv_folds = 5
-    print("🔍 FULL MODE: Using complete parameter grid (5-fold CV)")
+    print(" FULL MODE: Using complete parameter grid (5-fold CV)")
 
 rf_base = RandomForestClassifier(random_state=42, n_jobs=-1, verbose=0)
 grid_search = GridSearchCV(
@@ -260,11 +260,11 @@ grid_search = GridSearchCV(
     n_jobs=-1,
     verbose=2  # Show progress
 )
-print("⏳ Searching best parameters...")
+print(" Searching best parameters...")
 grid_search.fit(X_train, y_train)
 
-print(f"\n✅ Best parameters: {grid_search.best_params_}")
-print(f"✅ Best CV score: {grid_search.best_score_:.4f}")
+print(f"\n Best parameters: {grid_search.best_params_}")
+print(f" Best CV score: {grid_search.best_score_:.4f}")
 
 # --- 7. FINAL MODEL EVALUATION ---
 print("\n=== TRAINING FINAL MODEL (BEST RANDOM FOREST) ===")
@@ -273,7 +273,7 @@ final_model = grid_search.best_estimator_
 y_pred = final_model.predict(X_test)
 test_score = final_model.score(X_test, y_test)
 
-print("\n📋 Classification Report:")
+print("\n Classification Report:")
 print(classification_report(y_test, y_pred, target_names=le.classes_))
 
 # Feature Importance (Top 15)
@@ -336,4 +336,5 @@ feature_config = {
 
 config_filename = 'model_config.json'
 with open(config_filename, 'w') as f:
+
     json.dump(feature_config, f, indent=2)
