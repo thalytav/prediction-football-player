@@ -16,55 +16,80 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS for minimalist green & white football theme
 st.markdown("""
 <style>
+    /* Remove default streamlit background */
+    .stApp {
+        background-color: #ffffff;
+    }
+    
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #1f77b4;
+        color: #1a6b3d;
         text-align: center;
-        padding: 1rem 0;
+        padding: 2rem 0 1rem 0;
+        border-bottom: 3px solid #1a6b3d;
     }
+    
     .subtitle {
-        font-size: 1.1rem;
-        color: #555;
+        font-size: 1rem;
+        color: #4a4a4a;
         text-align: center;
-        padding-bottom: 2rem;
+        padding: 1.5rem 0;
+        font-weight: 500;
     }
+    
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-color: #f0f9f6;
+        border: 2px solid #1a6b3d;
         padding: 1.5rem;
-        border-radius: 10px;
-        color: white;
+        border-radius: 8px;
+        color: #1a6b3d;
         text-align: center;
         margin: 0.5rem 0;
     }
+    
     .stButton>button {
         width: 100%;
-        background-color: #1f77b4;
+        background-color: #1a6b3d;
         color: white;
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         font-weight: bold;
         padding: 0.75rem;
-        border-radius: 10px;
+        border-radius: 6px;
         border: none;
-        transition: all 0.3s;
+        transition: all 0.2s;
     }
+    
     .stButton>button:hover {
-        background-color: #145a8a;
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        background-color: #0f4620;
+        box-shadow: 0 2px 8px rgba(26, 107, 61, 0.3);
     }
+    
     .prediction-result {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background-color: #1a6b3d;
         padding: 2rem;
-        border-radius: 15px;
+        border-radius: 8px;
         color: white;
         font-size: 1.5rem;
         text-align: center;
         margin: 1rem 0;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        border: 3px solid #ffffff;
+    }
+    
+    .info-card {
+        background-color: #f0f9f6;
+        border-left: 4px solid #1a6b3d;
+        padding: 1.5rem;
+        border-radius: 6px;
+        margin: 1rem 0;
+    }
+    
+    .section-divider {
+        border-top: 2px solid #1a6b3d;
+        margin: 2rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -79,9 +104,9 @@ try:
         config = json.load(f)
     st.sidebar.markdown("### Model Performance")
     st.sidebar.markdown(f"""
-    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 10px; color: white;'>
-        <div style='font-size: 1.2rem; font-weight: bold;'>Accuracy</div>
-        <div style='font-size: 2rem; font-weight: bold;'>{config['accuracy']:.2%}</div>
+    <div style='background-color: #f0f9f6; border-left: 4px solid #1a6b3d; padding: 1rem; border-radius: 6px; color: #1a6b3d;'>
+        <div style='font-size: 1rem; font-weight: bold;'>Accuracy</div>
+        <div style='font-size: 2rem; font-weight: bold; color: #1a6b3d;'>{config['accuracy']:.2%}</div>
         <div style='font-size: 0.9rem; margin-top: 0.5rem;'>CV Score: {config['cv_score']:.2%}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -319,9 +344,9 @@ with col2:
     
     # Model performance in a card
     st.markdown(f"""
-    <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 1rem;'>
+    <div style='background-color: #1a6b3d; padding: 1.5rem; border-radius: 8px; color: white; margin-bottom: 1rem;'>
         <div style='font-size: 1.1rem; font-weight: bold;'>Model Information</div>
-        <hr style='border-color: rgba(255,255,255,0.3); margin: 0.5rem 0;'>
+        <hr style='border-color: rgba(255,255,255,0.2); margin: 0.5rem 0;'>
         <div style='margin: 0.5rem 0;'><strong>Algorithm:</strong> Random Forest</div>
         <div style='margin: 0.5rem 0;'><strong>Test Accuracy:</strong> {config['accuracy']:.2%}</div>
         <div style='margin: 0.5rem 0;'><strong>CV Score:</strong> {config['cv_score']:.2%}</div>
