@@ -9,7 +9,7 @@ file_path = 'neo4j_query_table_data_2025-11-27.csv'
 try:
     df = pd.read_csv(file_path, encoding='utf-8')
 except UnicodeDecodeError:
-    print("⚠️ Gagal baca UTF-8, mencoba Latin-1...")
+    print("Gagal baca UTF-8, mencoba Latin-1...")
     df = pd.read_csv(file_path, encoding='latin-1')
 
 print(f"Data awal dimuat: {len(df)} baris.")
@@ -34,7 +34,7 @@ def clean_text(text):
     return text
 
 # 3. Eksekusi Pembersihan
-print("🧹 Sedang membersihkan nama pemain...")
+print("Sedang membersihkan nama pemain...")
 df['full_name'] = df['full_name'].apply(clean_text)
 
 # (Opsional) Bersihin kolom posisi juga biar gak ada spasi aneh
@@ -50,5 +50,6 @@ print(df[['full_name', 'positions']].head(5))
 new_file_name = 'cleaned_football_data.csv'
 df.to_csv(new_file_name, index=False, encoding='utf-8')
 
-print(f"\n✅ SUKSES! Data bersih disimpan sebagai '{new_file_name}'")
-print("👉 Pake file yang BARU ini untuk training model dan app.py ya!")
+print(f"\n SUKSES! Data bersih disimpan sebagai '{new_file_name}'")
+
+print("Pake file yang BARU ini untuk training model dan app.py ya!")
