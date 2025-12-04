@@ -12,14 +12,13 @@
   ],
   "use_smote": true,
   "model_type": "RandomForest",
-  "accuracy": 0.925626204238921,
-  "cv_score": 0.9203275529865124,
+  "accuracy": 0.9260115606936417,
+  "cv_score": 0.9026011560693642,
   "best_params": {
     "max_depth": 20,
     "max_features": "sqrt",
-    "min_samples_leaf": 1,
     "min_samples_split": 3,
-    "n_estimators": 250
+    "n_estimators": 200
   },
   "feature_engineering": {
     "embedding_stats": true,
