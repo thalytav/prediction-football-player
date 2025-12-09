@@ -1,8 +1,44 @@
 # Virtual Environment
 .venv/
 venv/
-venv
-.venv
+env/
+ENV/
 
-# Model files
+# Model files (large files not suitable for git)
 *.pkl
+
+# Environment variables and sensitive data
+.env
+.env.local
+.env.*.local
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,51 @@
+{
+  "n_embedding_features": 64,
+  "stats_cols": [
+    "age",
+    "acceleration",
+    "sprint_speed",
+    "dribbling",
+    "short_passing",
+    "finishing",
+    "stamina",
+    "strength"
+  ],
+  "use_smote": true,
+  "model_type": "RandomForest",
+  "accuracy": 0.5794743429286608,
+  "train_accuracy": 1.0,
+  "cv_score": 0.9055555555555556,
+  "best_params": {
+    "n_estimators": 200,
+    "max_depth": 20,
+    "min_samples_split": 3,
+    "max_features": "sqrt",
+    "random_state": 42,
+    "n_jobs": -1
+  },
+  "feature_engineering": {
+    "embedding_stats": true,
+    "normalized_stats": true,
+    "domain_features": true
+  },
+  "trained_at": "2025-12-09T18:05:13.462412",
+  "total_features": 82,
+  "total_samples": 3993,
+  "position_classes": [
+    "CAM",
+    "CB",
+    "CDM",
+    "CF",
+    "CM",
+    "GK",
+    "LB",
+    "LM",
+    "LW",
+    "LWB",
+    "RB",
+    "RM",
+    "RW",
+    "RWB",
+    "ST"
+  ]
+}
