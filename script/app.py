@@ -516,11 +516,12 @@ with tab2:
     with col_right:
         st.markdown("#### Filter Settings")
         
-        # Filter by position
+        # KODE BARU (AMAN)
+# Kita tambahkan .dropna() untuk membuang data kosong sebelum di-unique & sort
         selected_positions = st.multiselect(
-            "Filter by Position",
-            options=sorted(df['primary_position'].unique()),
-            default=[]
+        "Filter by Position",
+        options=sorted(df['primary_position'].dropna().unique()),
+        default=[]
         )
         
         # Number of players to show
@@ -765,9 +766,9 @@ with tab3:
         # Calculate average stats per position
         stats_by_pos = df.groupby('primary_position')[stats_cols].mean()
         
-        # Select a position to display
-        selected_pos = st.selectbox("Select Position", sorted(df['primary_position'].unique()))
-        
+        # KODE BARU (AMAN)
+# Tambahkan .dropna() lagi di sini
+        selected_pos = st.selectbox("Select Position", sorted(df['primary_position'].dropna().unique()))
         if selected_pos in stats_by_pos.index:
             stats = stats_by_pos.loc[selected_pos]
             
