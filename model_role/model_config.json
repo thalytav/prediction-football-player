@@ -1,5 +1,5 @@
 {
-  "task": "primary_position_15_classes",
+  "task": "role_4_classes_GK_DEF_MID_FWD",
   "n_embedding_features": 64,
   "stats_cols": [
     "age",
@@ -13,16 +13,15 @@
   ],
   "use_smote": true,
   "model_type": "RandomForest",
-  "accuracy_top1": 0.574468085106383,
-  "accuracy": 0.574468085106383,
-  "cv_score": 0.5651247786264785,
-  "cv_std": 0.005598916190259873,
+  "accuracy_top1": 0.8135168961201502,
+  "cv_score": 0.8033864629784979,
+  "cv_std": 0.008836182308302912,
   "train_accuracy": 1.0,
-  "baseline_accuracy": 0.18407212622088656,
-  "baseline_class": "CB",
+  "baseline_accuracy": 0.3666416228399699,
+  "baseline_class": "MID",
   "topk_accuracy": {
-    "top_3": 0.804755944931164,
-    "top_5": 0.9111389236545682
+    "top_2": 0.9912390488110138,
+    "top_3": 1.0
   },
   "best_params": {
     "max_depth": 20,
@@ -35,24 +34,13 @@
     "normalized_stats": true,
     "domain_features": true
   },
-  "trained_at": "2025-12-11T11:56:16.260362",
+  "trained_at": "2025-12-11T11:56:24.418272",
   "total_features": 82,
   "total_samples": 3993,
   "classes": [
-    "CAM",
-    "CB",
-    "CDM",
-    "CF",
-    "CM",
+    "DEF",
+    "FWD",
     "GK",
-    "LB",
-    "LM",
-    "LW",
-    "LWB",
-    "RB",
-    "RM",
-    "RW",
-    "RWB",
-    "ST"
+    "MID"
   ]
 }

@@ -13,6 +13,7 @@ import tempfile
 import os
 from neo4j_connector import create_neo4j_connection
 from dotenv import load_dotenv
+from neo4j import GraphDatabase  # <-- tambahan untuk koneksi Neo4j langsung
 
 # Load environment variables
 load_dotenv()
@@ -28,7 +29,6 @@ st.set_page_config(
 # Custom CSS for minimalist green & white football theme
 st.markdown("""
 <style>
-    /* Remove default streamlit background */
     .stApp {
         background-color: #ffffff;
     }
@@ -107,17 +107,14 @@ st.markdown("""
 st.markdown('<div class="main-header">AI Football Scout: Position Predictor</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Prediksi posisi ideal pemain sepak bola menggunakan <strong>Graph Database Embeddings</strong>, <strong>Advanced Feature Engineering</strong>, dan <strong>Random Forest</strong></div>', unsafe_allow_html=True)
 
-# Create tabs for different sections
+# Tabs
 tab1, tab2, tab3 = st.tabs(["Prediction", "Graph Explorer", "Dataset Analysis"])
 
-# Sidebar navigation (remove model performance from here)
+# Sidebar navigation
 st.sidebar.markdown("### Navigation")
 st.sidebar.info("Use tabs above to:\n- Make predictions\n- Explore player network graph\n- Analyze dataset statistics")
 
-
-
 # --- KAMUS POSISI LENGKAP ---
-# Ini daftar semua posisi yang mungkin muncul
 POSISI_LENGKAP = {
     "GK": "Goalkeeper (Kiper)",
     "CB": "Center Back (Bek Tengah)",
@@ -132,56 +129,159 @@ POSISI_LENGKAP = {
     "RM": "Right Midfielder (Gelandang Sayap Kanan)",
     "LW": "Left Winger (Penyerang Sayap Kiri)",
     "RW": "Right Winger (Penyerang Sayap Kanan)",
-    "CF": "Center Forward (Penyerang Lobang / Second Striker)",
+    "CF": "Center Forward (Penyerang Lubang / Second Striker)",
     "ST": "Striker (Ujung Tombak)"
 }
 
-# --- FUNGSI LOAD DATA & MODEL (DI-CACHE BIAR NGEBUT) ---
+# --- FUNGSI LOAD DATA & MODEL (DI-CACHE) ---
 @st.cache_resource
 def load_saved_model():
-    """Load pre-trained model and artifacts"""
+    """Load pre-trained 15-position model and artifacts"""
     try:
-        # Resolve paths relative to script location
         script_dir = os.path.dirname(os.path.abspath(__file__))
         model_dir = os.path.normpath(os.path.join(script_dir, '..', 'model'))
         data_dir = os.path.normpath(os.path.join(script_dir, '..', 'data'))
         
-        # Load model
         model = joblib.load(os.path.join(model_dir, 'best_football_model.pkl'))
         le = joblib.load(os.path.join(model_dir, 'label_encoder.pkl'))
         scaler = joblib.load(os.path.join(model_dir, 'scaler.pkl'))
         
-        # Load config
         with open(os.path.join(model_dir, 'model_config.json'), 'r') as f:
             config = json.load(f)
         
-        # Load data with embeddings for reference
         df = pd.read_csv(os.path.join(data_dir, 'player_embeddings.csv'))
         df['embedding'] = df['embedding'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
         df['primary_position'] = df['positions'].apply(lambda x: x.split(',')[0] if isinstance(x, str) else x)
         
         return model, le, scaler, df, config
     except FileNotFoundError as e:
-        st.error(f"Model files not found! Please run 'python train_model.py' first.")
+        st.error("Model files for 15-class position not found! Please run step4_train_model.py first.")
         st.error(f"Missing file: {e.filename}")
         st.stop()
 
-# Load semuanya
-model, le, scaler, df, config = load_saved_model()
+@st.cache_resource
+def load_role_model():
+    """Load pre-trained 4-role model and artifacts."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        model_role_dir = os.path.normpath(os.path.join(script_dir, '..', 'model_role'))
 
-# Display stats
+        model_role = joblib.load(os.path.join(model_role_dir, 'best_football_model.pkl'))
+        le_role = joblib.load(os.path.join(model_role_dir, 'label_encoder.pkl'))
+        scaler_role = joblib.load(os.path.join(model_role_dir, 'scaler.pkl'))
+
+        config_role_path = os.path.join(model_role_dir, 'model_config.json')
+        with open(config_role_path, 'r') as f:
+            config_role = json.load(f)
+
+        return model_role, le_role, scaler_role, config_role
+    except FileNotFoundError as e:
+        st.error("Model files for 4-role classifier not found! Please run step4_train_model.py first (model_role).")
+        st.error(f"Missing file: {e.filename}")
+        st.stop()
+
+
+def fetch_players_from_neo4j_for_graph(
+    uri,
+    username,
+    password,
+    n_players,
+    selected_positions,
+    focus_name=None
+):
+    """
+    Ambil data pemain untuk Graph Explorer.
+    Akan selalu berusaha memasukkan pemain dengan nama = focus_name
+    (misalnya pemain yang baru saja diprediksi), jika ada.
+    """
+    if selected_positions is None:
+        selected_positions = []
+    
+    driver = GraphDatabase.driver(uri, auth=(username, password))
+
+    query_main = """
+    MATCH (p:Player)
+    WHERE p.embedding IS NOT NULL
+      AND (
+        size($positions) = 0 OR
+        coalesce(p.predicted_position, p.primary_position, "") IN $positions
+      )
+    RETURN
+      p.full_name AS full_name,
+      coalesce(p.predicted_position, p.primary_position) AS primary_position,
+      p.age AS age,
+      p.embedding AS embedding
+    ORDER BY full_name
+    LIMIT $limit
+    """
+
+    # Query khusus untuk pemain fokus (yang baru diprediksi)
+    query_focus = """
+    MATCH (p:Player {full_name: $focus_name})
+    WHERE p.embedding IS NOT NULL
+    RETURN
+      p.full_name AS full_name,
+      coalesce(p.predicted_position, p.primary_position) AS primary_position,
+      p.age AS age,
+      p.embedding AS embedding
+    LIMIT 1
+    """
+
+    try:
+        with driver.session() as session:
+            records = session.run(
+                query_main,
+                positions=selected_positions,
+                limit=int(n_players)
+            ).data()
+
+            if focus_name:
+                focus_rec = session.run(
+                    query_focus,
+                    focus_name=focus_name
+                ).data()
+                if focus_rec:
+                    records.extend(focus_rec)
+    finally:
+        driver.close()
+    
+    if not records:
+        return pd.DataFrame(columns=['full_name', 'primary_position', 'age', 'embedding'])
+    
+    df_neo = pd.DataFrame(records)
+
+    # Buang duplikat, tapi kita ingin pemain fokus diprioritaskan
+    if focus_name:
+        # pisahkan baris fokus & lainnya
+        mask_focus = df_neo["full_name"] == focus_name
+        focus_rows = df_neo[mask_focus]
+        other_rows = df_neo[~mask_focus].drop_duplicates(subset="full_name")
+
+        # gabungkan: pemain fokus di atas, baru yang lain
+        df_neo = pd.concat([focus_rows, other_rows], ignore_index=True)
+    else:
+        df_neo = df_neo.drop_duplicates(subset="full_name")
+
+    # Sekarang potong sesuai n_players (pemain fokus sudah di atas jadi tidak terbuang)
+    df_neo = df_neo.head(int(n_players))
+
+    df_neo['age'] = pd.to_numeric(df_neo['age'], errors='coerce')
+    return df_neo
+
+
+# Load models & data
+model, le, scaler, df, config = load_saved_model()
+model_role, le_role, scaler_role, config_role = load_role_model()
 stats_cols = config['stats_cols']
 
-# --- SIDEBAR: INPUT STATISTIK ---
+# --- SIDEBAR INPUT ---
 st.sidebar.markdown("---")
 st.sidebar.header("Input Data Pemain Baru")
 st.sidebar.markdown("Masukkan informasi pemain untuk prediksi dan penyimpanan ke Neo4j:")
 
-# Player metadata
 st.sidebar.markdown("#### Identitas Pemain")
 player_name = st.sidebar.text_input("Nama Lengkap Pemain", placeholder="e.g., Cristiano Ronaldo")
 
-# Neo4j connection settings
 st.sidebar.markdown("---")
 st.sidebar.markdown("#### Neo4j Connection (Optional)")
 with st.sidebar.expander("Configure Neo4j Connection"):
@@ -225,341 +325,414 @@ input_df = user_input_features()
 # TAB 1: PREDICTION
 # ==================================================
 with tab1:
-    # --- MAIN PAGE: HASIL ---
     col1, col2 = st.columns([2, 1])
 
-with col1:
-    st.markdown("### Data Input Pemain")
-    
-    # Display input in a nice table format
-    input_display = input_df.T
-    input_display.columns = ['Nilai']
-    input_display.index = ['Usia', 'Acceleration', 'Sprint Speed', 'Dribbling', 
-                           'Short Passing', 'Finishing', 'Stamina', 'Strength']
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.dataframe(input_display.iloc[:4], use_container_width=True)
-    with col_b:
-        st.dataframe(input_display.iloc[4:], use_container_width=True)
-
-    st.markdown("---")
-    if st.button('Prediksi Posisi Sekarang', use_container_width=True):
-        # Validate player name if Neo4j is enabled
-        if enable_neo4j and not player_name.strip():
-            st.error("❌ Nama pemain harus diisi untuk menyimpan ke Neo4j!")
-            st.stop()
+    with col1:
+        st.markdown("### Data Input Pemain")
         
-        # === FEATURE ENGINEERING (SAMA DENGAN TRAINING!) ===
+        input_display = input_df.T
+        input_display.columns = ['Nilai']
+        input_display.index = ['Usia', 'Acceleration', 'Sprint Speed', 'Dribbling', 
+                               'Short Passing', 'Finishing', 'Stamina', 'Strength']
         
-        # 1. Cari Pemain Mirip berdasarkan stats
-        df_stats = df[stats_cols].fillna(df[stats_cols].median())
-        dists = euclidean_distances(input_df, df_stats)
-        
-        closest_idx = np.argmin(dists)
-        closest_player = df.iloc[closest_idx]
-        
-        # 2. Build features dengan cara yang SAMA dengan training
-        # A. Embedding dari pemain terdekat
-        player_embedding = np.array(closest_player['embedding']).reshape(1, -1)
-        X_embedding = pd.DataFrame(player_embedding, columns=[f'emb_{i}' for i in range(player_embedding.shape[1])])
-        
-        # B. Embedding statistics
-        emb_mean = np.mean(player_embedding)
-        emb_std = np.std(player_embedding)
-        emb_max = np.max(player_embedding)
-        emb_min = np.min(player_embedding)
-        emb_range = emb_max - emb_min
-        emb_stats = pd.DataFrame([[emb_mean, emb_std, emb_max, emb_min, emb_range]], 
-                                  columns=['emb_mean', 'emb_std', 'emb_max', 'emb_min', 'emb_range'])
-        
-        # C. Normalized raw stats (pake scaler yang sama dari training)
-        X_stats_scaled = pd.DataFrame(
-            scaler.transform(input_df),
-            columns=stats_cols
-        )
-        
-        # D. Domain features
-        attack_score = (input_df['finishing'].values[0] + input_df['dribbling'].values[0] + input_df['sprint_speed'].values[0]) / 3
-        defense_score = (input_df['strength'].values[0] + input_df['stamina'].values[0]) / 2
-        midfield_score = (input_df['short_passing'].values[0] + input_df['stamina'].values[0]) / 2
-        speed_score = (input_df['acceleration'].values[0] + input_df['sprint_speed'].values[0]) / 2
-        technical_score = (input_df['dribbling'].values[0] + input_df['short_passing'].values[0]) / 2
-        
-        domain_features = pd.DataFrame([[attack_score, defense_score, midfield_score, speed_score, technical_score]],
-                                        columns=['attack_score', 'defense_score', 'midfield_score', 'speed_score', 'technical_score'])
-        
-        # E. Combine ALL features (82 total)
-        X_final = pd.concat([
-            X_embedding.reset_index(drop=True),
-            emb_stats.reset_index(drop=True),
-            X_stats_scaled.reset_index(drop=True),
-            domain_features.reset_index(drop=True)
-        ], axis=1)
-        
-        # 3. Prediksi dengan model
-        prediction_idx = model.predict(X_final)[0]
-        prediction_label = le.inverse_transform([prediction_idx])[0]
-        prediction_proba = model.predict_proba(X_final)
-        
-        # Ambil nama lengkap posisi dari kamus
-        nama_lengkap_posisi = POSISI_LENGKAP.get(prediction_label, prediction_label)
-
-        # --- TAMPILAN HASIL ---
-        st.markdown(f"""
-        <div class="prediction-result">
-            <div style='font-size: 1rem; opacity: 0.9;'>Posisi Ideal Pemain</div>
-            <div style='font-size: 2.5rem; font-weight: bold; margin: 0.5rem 0;'>{prediction_label}</div>
-            <div style='font-size: 1.2rem;'>{nama_lengkap_posisi}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("### Logic Reasoning")
-        st.info(f"""
-        **Bagaimana sistem membuat prediksi ini?**
-        
-        1. **Feature Engineering**: Sistem menggunakan 82 features yang terdiri dari:
-           - 64 dimensi graph embedding dari Neo4j
-           - 8 atribut statistik yang dinormalisasi
-           - 5 statistical features dari embedding
-           - 5 domain-specific features (attack, defense, midfield, speed, technical scores)
-        
-        2. **Similar Player Analysis**: Profil statistik Anda memiliki kemiripan tertinggi dengan pemain **{closest_player['full_name']}** yang bermain di posisi {closest_player['primary_position']}.
-        
-        3. **Model Prediction**: Random Forest classifier dengan accuracy {config['accuracy']:.2%} menganalisis semua features dan merekomendasikan posisi **{prediction_label}** sebagai posisi paling optimal.
-        """)
-        
-        # Show feature scores
-        st.markdown("### Feature Scores Breakdown")
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b = st.columns(2)
         with col_a:
-            st.metric("Attack Score", f"{attack_score:.1f}/100", help="Finishing + Dribbling + Sprint Speed")
-            st.metric("Defense Score", f"{defense_score:.1f}/100", help="Strength + Stamina")
+            st.dataframe(input_display.iloc[:4], use_container_width=True)
         with col_b:
-            st.metric("Midfield Score", f"{midfield_score:.1f}/100", help="Short Passing + Stamina")
-            st.metric("Speed Score", f"{speed_score:.1f}/100", help="Acceleration + Sprint Speed")
-        with col_c:
-            st.metric("Technical Score", f"{technical_score:.1f}/100", help="Dribbling + Short Passing")
-            st.metric("Similar Player", closest_player['full_name'][:20], help=f"Posisi: {closest_player['primary_position']}")
+            st.dataframe(input_display.iloc[4:], use_container_width=True)
 
-        # --- VISUALISASI PROBABILITAS ---
         st.markdown("---")
-        st.markdown("### Confidence Level Model")
-        st.caption("Probabilitas untuk 5 posisi teratas berdasarkan analisis model")
-        
-        proba_df = pd.DataFrame(prediction_proba, columns=le.classes_).T
-        proba_df.columns = ['Probability']
-        proba_df = proba_df.sort_values(by='Probability', ascending=False).head(5)
-        
-        # Create better visualization
-        fig, ax = plt.subplots(figsize=(10, 5))
-        colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(proba_df)))
-        bars = ax.barh(proba_df.index, proba_df['Probability'], color=colors)
-        
-        # Add value labels on bars
-        for i, bar in enumerate(bars):
-            width = bar.get_width()
-            ax.text(width + 0.01, bar.get_y() + bar.get_height()/2, 
-                   f'{width:.1%}', 
-                   ha='left', va='center', fontweight='bold', fontsize=10)
-        
-        ax.set_xlabel("Probability Score", fontsize=12, fontweight='bold')
-        ax.set_ylabel("Position", fontsize=12, fontweight='bold')
-        ax.set_xlim(0, 1)
-        ax.grid(axis='x', alpha=0.3, linestyle='--')
-        plt.tight_layout()
-        st.pyplot(fig)
-        
-        # === NEO4J INTEGRATION ===
-        if enable_neo4j:
-            st.markdown("---")
-            st.markdown("### Neo4j Real-Time Integration")
+        if st.button('Prediksi Posisi Sekarang', use_container_width=True):
+            if enable_neo4j and not player_name.strip():
+                st.error("❌ Nama pemain harus diisi untuk menyimpan ke Neo4j!")
+                st.stop()
             
-            try:
-                with st.spinner("Connecting to Neo4j..."):
-                    # Create connection
-                    neo4j_conn = create_neo4j_connection(
-                        uri=neo4j_uri,
-                        username=neo4j_username,
-                        password=neo4j_password
-                    )
-                
-                st.success("✅ Connected to Neo4j successfully!")
-                
-                # DEBUG: Show what will be saved
-                st.info(f"**Saving Player Data:**\n- Name: **{player_name.strip()}**\n- Age: **{int(input_df['age'].values[0])}**")
-                
-                # Prepare player data for insertion (use ACTUAL user input, not closest player)
-                player_data = {
-                    'full_name': player_name.strip(),  # User's input name
-                    'age': int(input_df['age'].values[0]),  # User's input age
-                    'predicted_position': prediction_label,
-                    'embedding': player_embedding.flatten(),  # Use the embedding from closest player for feature engineering
-                    'stats': {
-                        'acceleration': int(input_df['acceleration'].values[0]),
-                        'sprint_speed': int(input_df['sprint_speed'].values[0]),
-                        'dribbling': int(input_df['dribbling'].values[0]),
-                        'short_passing': int(input_df['short_passing'].values[0]),
-                        'finishing': int(input_df['finishing'].values[0]),
-                        'stamina': int(input_df['stamina'].values[0]),
-                        'strength': int(input_df['strength'].values[0])
-                    },
-                    'domain_scores': {
-                        'attack_score': float(attack_score),
-                        'defense_score': float(defense_score),
-                        'midfield_score': float(midfield_score),
-                        'speed_score': float(speed_score),
-                        'technical_score': float(technical_score)
+            # 1. Cari pemain paling mirip berdasarkan stats
+            df_stats = df[stats_cols].fillna(df[stats_cols].median())
+            dists = euclidean_distances(input_df, df_stats)
+            closest_idx = np.argmin(dists)
+            closest_player = df.iloc[closest_idx]
+            
+            # 2. FEATURE COMMON (embedding + stats + domain)
+            player_embedding = np.array(closest_player['embedding']).reshape(1, -1)
+            X_embedding = pd.DataFrame(
+                player_embedding,
+                columns=[f'emb_{i}' for i in range(player_embedding.shape[1])]
+            )
+            
+            emb_mean = np.mean(player_embedding)
+            emb_std = np.std(player_embedding)
+            emb_max = np.max(player_embedding)
+            emb_min = np.min(player_embedding)
+            emb_range = emb_max - emb_min
+            emb_stats = pd.DataFrame(
+                [[emb_mean, emb_std, emb_max, emb_min, emb_range]],
+                columns=['emb_mean', 'emb_std', 'emb_max', 'emb_min', 'emb_range']
+            )
+            
+            attack_score = (input_df['finishing'].values[0] +
+                            input_df['dribbling'].values[0] +
+                            input_df['sprint_speed'].values[0]) / 3
+            defense_score = (input_df['strength'].values[0] +
+                             input_df['stamina'].values[0]) / 2
+            midfield_score = (input_df['short_passing'].values[0] +
+                              input_df['stamina'].values[0]) / 2
+            speed_score = (input_df['acceleration'].values[0] +
+                           input_df['sprint_speed'].values[0]) / 2
+            technical_score = (input_df['dribbling'].values[0] +
+                               input_df['short_passing'].values[0]) / 2
+            
+            domain_features = pd.DataFrame(
+                [[attack_score, defense_score, midfield_score, speed_score, technical_score]],
+                columns=['attack_score', 'defense_score', 'midfield_score', 'speed_score', 'technical_score']
+            )
+            
+            # 3. Stats scaled untuk dua model (15 posisi & 4 role)
+            X_stats_scaled_pos = pd.DataFrame(
+                scaler.transform(input_df),
+                columns=stats_cols
+            )
+            X_stats_scaled_role = pd.DataFrame(
+                scaler_role.transform(input_df),
+                columns=stats_cols
+            )
+            
+            # 4. Final feature matrix
+            X_final_pos = pd.concat(
+                [
+                    X_embedding.reset_index(drop=True),
+                    emb_stats.reset_index(drop=True),
+                    X_stats_scaled_pos.reset_index(drop=True),
+                    domain_features.reset_index(drop=True)
+                ],
+                axis=1
+            )
+            
+            X_final_role = pd.concat(
+                [
+                    X_embedding.reset_index(drop=True),
+                    emb_stats.reset_index(drop=True),
+                    X_stats_scaled_role.reset_index(drop=True),
+                    domain_features.reset_index(drop=True)
+                ],
+                axis=1
+            )
+            
+            # 5. Prediksi model 15 posisi
+            prediction_idx_pos = model.predict(X_final_pos)[0]
+            prediction_label_pos = le.inverse_transform([prediction_idx_pos])[0]
+            prediction_proba_pos = model.predict_proba(X_final_pos)[0]
+            
+            # 6. Prediksi model 4 role
+            prediction_idx_role = model_role.predict(X_final_role)[0]
+            prediction_label_role = le_role.inverse_transform([prediction_idx_role])[0]
+            prediction_proba_role = model_role.predict_proba(X_final_role)[0]
+            
+            nama_lengkap_posisi = POSISI_LENGKAP.get(prediction_label_pos, prediction_label_pos)
+            
+            # HEADLINE: 4-role
+            st.markdown(f"""
+            <div class="prediction-result">
+                <div style='font-size: 1rem; opacity: 0.9;'>Recommended Role (4 Kelas)</div>
+                <div style='font-size: 2.5rem; font-weight: bold; margin: 0.5rem 0;'>{prediction_label_role}</div>
+                <div style='font-size: 1.1rem; opacity: 0.9;'>Kelompok peran utama: GK / DEF / MID / FWD</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Posisi spesifik (15 kelas)
+            st.markdown("### Prediksi Posisi Spesifik (15 Kelas)")
+            st.markdown(f"**Predicted primary position:** `{prediction_label_pos}` — {nama_lengkap_posisi}")
+            
+            st.markdown("#### Top-5 candidate positions")
+            proba_df = pd.DataFrame(prediction_proba_pos, index=le.classes_, columns=['Probability'])
+            proba_df = proba_df.sort_values(by='Probability', ascending=False).head(5)
+            
+            fig, ax = plt.subplots(figsize=(10, 5))
+            colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(proba_df)))
+            bars = ax.barh(proba_df.index, proba_df['Probability'], color=colors)
+            for i, bar in enumerate(bars):
+                width = bar.get_width()
+                ax.text(width + 0.01, bar.get_y() + bar.get_height()/2,
+                        f'{width:.1%}', ha='left', va='center', fontweight='bold', fontsize=10)
+            ax.set_xlabel("Probability Score", fontsize=12, fontweight='bold')
+            ax.set_ylabel("Position", fontsize=12, fontweight='bold')
+            ax.set_xlim(0, 1)
+            ax.grid(axis='x', alpha=0.3, linestyle='--')
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # Logic reasoning
+            st.markdown("### Logic Reasoning")
+            acc_role = config_role.get('accuracy', config_role.get('accuracy_top1', 0.0))
+            st.info(f"""
+            **Bagaimana sistem membuat prediksi ini?**
+            
+            1. **Feature Engineering (82 fitur):**
+               - 64 dimensi graph embedding dari Neo4j (diambil dari pemain paling mirip: **{closest_player['full_name']}**)
+               - 8 atribut statistik yang dinormalisasi
+               - 5 statistical features dari embedding
+               - 5 domain-specific features (attack, defense, midfield, speed, technical scores)
+            
+            2. **Role Prediction (4 kelas):**
+               - Model khusus **GK/DEF/MID/FWD** dengan akurasi top-1 sekitar **{acc_role:.2%}**
+               - Memberi rekomendasi garis besar peran pemain → di sini: **{prediction_label_role}**
+            
+            3. **Detailed Position Prediction (15 kelas):**
+               - Model kedua memetakan ke posisi spesifik seperti ST, LW, CM, CB, dst.
+               - Top-1 prediksi: **{prediction_label_pos}**
+               - Top-5 alternatif posisi bisa dilihat di grafik probabilitas di atas.
+            """)
+            
+            # Feature scores
+            st.markdown("### Feature Scores Breakdown")
+            col_a2, col_b2, col_c2 = st.columns(3)
+            with col_a2:
+                st.metric("Attack Score", f"{attack_score:.1f}/100", help="Finishing + Dribbling + Sprint Speed")
+                st.metric("Defense Score", f"{defense_score:.1f}/100", help="Strength + Stamina")
+            with col_b2:
+                st.metric("Midfield Score", f"{midfield_score:.1f}/100", help="Short Passing + Stamina")
+                st.metric("Speed Score", f"{speed_score:.1f}/100", help="Acceleration + Sprint Speed")
+            with col_c2:
+                st.metric("Technical Score", f"{technical_score:.1f}/100", help="Dribbling + Short Passing")
+                st.metric("Similar Player", closest_player['full_name'][:20],
+                          help=f"Posisi: {closest_player['primary_position']}")
+            
+            # Neo4j integration
+            if enable_neo4j:
+                st.markdown("---")
+                st.markdown("### Neo4j Real-Time Integration")
+                try:
+                    with st.spinner("Connecting to Neo4j..."):
+                        neo4j_conn = create_neo4j_connection(
+                            uri=neo4j_uri,
+                            username=neo4j_username,
+                            password=neo4j_password
+                        )
+                    st.success("✅ Connected to Neo4j successfully!")
+                    
+                    st.info(f"**Saving Player Data:**\n- Name: **{player_name.strip()}**\n- Age: **{int(input_df['age'].values[0])}**")
+                    
+                    player_data = {
+                        'full_name': player_name.strip(),
+                        'age': int(input_df['age'].values[0]),
+                        'predicted_position': prediction_label_pos,
+                        'predicted_role': prediction_label_role,
+                        'embedding': player_embedding.flatten(),
+                        'stats': {
+                            'acceleration': int(input_df['acceleration'].values[0]),
+                            'sprint_speed': int(input_df['sprint_speed'].values[0]),
+                            'dribbling': int(input_df['dribbling'].values[0]),
+                            'short_passing': int(input_df['short_passing'].values[0]),
+                            'finishing': int(input_df['finishing'].values[0]),
+                            'stamina': int(input_df['stamina'].values[0]),
+                            'strength': int(input_df['strength'].values[0])
+                        },
+                        'domain_scores': {
+                            'attack_score': float(attack_score),
+                            'defense_score': float(defense_score),
+                            'midfield_score': float(midfield_score),
+                            'speed_score': float(speed_score),
+                            'technical_score': float(technical_score)
+                        }
                     }
-                }
-                
-                with st.spinner(f"Inserting player '{player_name}' to Neo4j..."):
-                    # Insert player node
-                    result = neo4j_conn.insert_player(player_data)
                     
-                    if result:
-                        st.write(f"✅ Node created: {result.get('full_name')}, Age: {result.get('age')}")
-                    else:
-                        st.error("❌ Failed to create player node - result is None!")
-                        st.stop()
+                    with st.spinner(f"Inserting player '{player_name}' to Neo4j..."):
+                        result = neo4j_conn.insert_player(player_data)
+                        
+                        if result:
+                            st.write(f"✅ Node created: {result.get('full_name')}, Age: {result.get('age')}")
+                        else:
+                            st.error("❌ Failed to create player node - result is None!")
+                            st.stop()
+                        
+                        neo4j_conn.create_position_relationship(player_name.strip(), prediction_label_pos)
                     
-                    # Create position relationship
-                    neo4j_conn.create_position_relationship(player_name.strip(), prediction_label)
-                
-                st.success(f"✅ Player **{player_name}** successfully saved to Neo4j!")
-                st.info(f"""
-                **Data yang disimpan:**
-                - **Node Type:** Player
-                - **Full Name:** {player_name.strip()}
-                - **Age:** {int(input_df['age'].values[0])}
-                - **Predicted Position:** {prediction_label}
-                - **Embedding:** 64-dimensional vector
-                - **Technical Stats:** All 8 attributes
-                - **Domain Scores:** 5 calculated features
-                - **Relationship:** PLAYS_AS → {prediction_label}
-                
-                **Verifikasi dengan query:**
-                ```cypher
-                MATCH (p:Player {{full_name: "{player_name.strip()}"}})
-                RETURN p.full_name, p.age, p.predicted_position
-                ```
-                """)
-                
-                # Close connection
-                neo4j_conn.close()
-                
-            except ConnectionError as e:
-                st.error(f"❌ Failed to connect to Neo4j: {str(e)}")
-                st.warning("Please check your Neo4j credentials and ensure the database is running.")
-            except Exception as e:
-                st.error(f"❌ Error inserting to Neo4j: {str(e)}")
-                st.warning("Player prediction completed but Neo4j insertion failed.")
+                    st.success(f"✅ Player **{player_name}** successfully saved to Neo4j!")
+                    st.info(f"""
+                    **Data yang disimpan:**
+                    - **Node Type:** Player
+                    - **Full Name:** {player_name.strip()}
+                    - **Age:** {int(input_df['age'].values[0])}
+                    - **Predicted Position:** {prediction_label_pos}
+                    - **Predicted Role:** {prediction_label_role}
+                    - **Embedding:** 64-dimensional vector
+                    - **Technical Stats:** All 8 attributes
+                    - **Domain Scores:** 5 calculated features
+                    - **Relationship:** PLAYS_AS → {prediction_label_pos}
+                    
+                    **Verifikasi dengan query:**
+                    ```cypher
+                    MATCH (p:Player {{full_name: "{player_name.strip()}"}})
+                    RETURN p.full_name, p.age, p.predicted_position, p.predicted_role
+                    ```
+                    """)
+                    
+                    neo4j_conn.close()
+                    # Simpan nama pemain terakhir yang sukses diinsert ke Neo4j
+                    st.session_state["last_predicted_player"] = player_name.strip()
 
-with col2:
-    st.markdown("### Informasi Sistem")
-    
-    # Reload config to get latest values (not cached)
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.normpath(os.path.join(script_dir, '..', 'model', 'model_config.json'))
-        with open(config_path, 'r') as f:
-            current_config = json.load(f)
-    except:
-        current_config = config
-    
-    # Model performance in a card
-    st.markdown(f"""
-    <div style='background-color: #1a6b3d; padding: 1.5rem; border-radius: 8px; color: white; margin-bottom: 1rem;'>
-        <div style='font-size: 1.1rem; font-weight: bold;'>Model Information</div>
-        <hr style='border-color: rgba(255,255,255,0.2); margin: 0.5rem 0;'>
-        <div style='margin: 0.5rem 0;'><strong>Algorithm:</strong> Random Forest</div>
-        <div style='margin: 0.5rem 0;'><strong>Test Accuracy:</strong> {current_config['accuracy']:.2%}</div>
-        <div style='margin: 0.5rem 0;'><strong>CV Score:</strong> {current_config['cv_score']:.2%}</div>
-        <div style='margin: 0.5rem 0;'><strong>Total Features:</strong> {current_config['n_embedding_features'] + len(current_config['stats_cols']) + 10}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("### Kamus Posisi")
-    st.caption("Daftar lengkap posisi yang dikenali sistem")
-    
-    # Kelompokkan manual UI-nya
-    with st.expander("Kiper & Bek (Defenders)", expanded=False):
-        st.markdown("- **GK:** Goalkeeper")
-        st.markdown("- **CB:** Center Back")
-        st.markdown("- **LB/RB:** Left/Right Back")
-        st.markdown("- **LWB/RWB:** Left/Right Wing Back")
+                except ConnectionError as e:
+                    st.error(f"❌ Failed to connect to Neo4j: {str(e)}")
+                    st.warning("Please check your Neo4j credentials and ensure the database is running.")
+                except Exception as e:
+                    st.error(f"❌ Error inserting to Neo4j: {str(e)}")
+                    st.warning("Player prediction completed but Neo4j insertion failed.")
 
-    with st.expander("Gelandang (Midfielders)", expanded=False):
-        st.markdown("- **CDM:** Central Defensive Midfielder")
-        st.markdown("- **CM:** Central Midfielder")
-        st.markdown("- **CAM:** Central Attacking Midfielder")
-        st.markdown("- **LM/RM:** Left/Right Midfielder")
+    with col2:
+        # st.markdown("### Informasi Sistem")
 
-    with st.expander("Penyerang (Attackers)", expanded=False):
-        st.markdown("- **LW/RW:** Left/Right Winger")
-        st.markdown("- **CF:** Center Forward")
-        st.markdown("- **ST:** Striker")
-    
-    # Footer info
-    st.markdown("---")
-    st.caption("**Tips:** Sesuaikan slider di sidebar untuk mengeksplorasi berbagai profil pemain dan melihat bagaimana perubahan atribut mempengaruhi prediksi posisi.")
+        # # ambil config model
+        # try:
+        #     script_dir = os.path.dirname(os.path.abspath(__file__))
+        #     config_path = os.path.normpath(os.path.join(script_dir, '..', 'model', 'model_config.json'))
+        #     with open(config_path, 'r') as f:
+        #         current_config = json.load(f)
+        # except:
+        #     current_config = config
+
+        # acc_key = "accuracy" if "accuracy" in current_config else "accuracy_top1"
+        # acc_val = current_config.get(acc_key, 0.0)
+
+        # # Model 1 pakai expander
+        # with st.expander("Model 1 — Primary Position (15 kelas)", expanded=True):
+        #     st.markdown("**Algorithm:** Random Forest")
+        #     st.markdown(f"**Test Accuracy:** {acc_val:.2%}")
+        #     st.markdown(f"**CV Score:** {current_config.get('cv_score', 0.0):.2%}")
+
+        # # Model 2 pakai expander
+        # with st.expander("Model 2 — Role (4 kelas)", expanded=True):
+        #     st.markdown("**Algorithm:** Random Forest")
+        #     st.markdown(
+        #         f"**Test Accuracy:** "
+        #         f"{config_role.get('accuracy', config_role.get('accuracy_top1', 0.0)):.2%}"
+        #     )
+        #     st.markdown(f"**CV Score:** {config_role.get('cv_score', 0.0):.2%}")
+
+        # ----- Kamus Posisi (tetap seperti sebelumnya) -----
+        st.markdown("### Kamus Posisi")
+        st.caption("Daftar lengkap posisi yang dikenali sistem")
+
+        with st.expander("Kiper (GK)", expanded=False):
+            st.markdown("- **GK:** Goalkeeper")
+
+        with st.expander("Bek (Defenders)", expanded=False):
+            st.markdown("- **CB:** Center Back")
+            st.markdown("- **LB/RB:** Left/Right Back")
+            st.markdown("- **LWB/RWB:** Left/Right Wing Back")
+
+        with st.expander("Gelandang (Midfielders)", expanded=False):
+            st.markdown("- **CDM:** Central Defensive Midfielder")
+            st.markdown("- **CM:** Central Midfielder")
+            st.markdown("- **CAM:** Central Attacking Midfielder")
+            st.markdown("- **LM/RM:** Left/Right Midfielder")
+
+        with st.expander("Penyerang (Attackers)", expanded=False):
+            st.markdown("- **LW/RW:** Left/Right Winger")
+            st.markdown("- **CF:** Center Forward")
+            st.markdown("- **ST:** Striker")
+
+        st.markdown("---")
+        st.caption(
+            "**Tips:** Sesuaikan slider di sidebar untuk mengeksplorasi berbagai profil "
+            "pemain dan melihat bagaimana perubahan atribut mempengaruhi prediksi posisi."
+        )
 
 # ==================================================
 # TAB 2: GRAPH EXPLORER
 # ==================================================
 with tab2:
     st.markdown("### Player Network Graph Explorer")
-    st.markdown("Visualisasi network graph pemain berdasarkan similarity embeddings dari Neo4j")
-    
+    st.markdown("Visualisasi network graph pemain berdasarkan similarity embeddings.")
+
     col_left, col_right = st.columns([3, 1])
     
     with col_right:
         st.markdown("#### Filter Settings")
         
-        # KODE BARU (AMAN)
-# Kita tambahkan .dropna() untuk membuang data kosong sebelum di-unique & sort
+        # Pilih sumber data graf: CSV offline vs Neo4j real-time
+        if enable_neo4j:
+            data_source = st.radio(
+                "Data Source",
+                ["Offline CSV", "Neo4j (Real-Time)"],
+                index=1
+            )
+        else:
+            data_source = "Offline CSV"
+            st.caption("Neo4j integration dimatikan di sidebar → menggunakan dataset CSV offline.")
+
         selected_positions = st.multiselect(
-        "Filter by Position",
-        options=sorted(df['primary_position'].dropna().unique()),
-        default=[]
+            "Filter by Position",
+            options=sorted(df['primary_position'].dropna().unique()),
+            default=[]
         )
         
-        # Number of players to show
         n_players = st.slider("Number of Players", 10, 100, 30, 5)
-        
-        # Similarity threshold
         similarity_threshold = st.slider("Similarity Threshold", 0.5, 0.95, 0.75, 0.05)
         
         graph_type = st.radio(
             "Graph Type",
             ["Position Clusters", "Player Similarity", "Position Hierarchy"]
         )
+
+        # 🔽 NEW: opsi sorting
+        sort_option = st.radio(
+            "Sort Nodes By",
+            ["Name (A–Z)", "Position", "Random"],
+            index=0
+        )
         
     with col_left:
-        # Filter dataframe
-        if selected_positions:
-            df_filtered = df[df['primary_position'].isin(selected_positions)].head(n_players)
+        # Tentukan sumber dataframe untuk graf
+        if data_source == "Neo4j (Real-Time)" and enable_neo4j:
+            try:
+                focus_name = st.session_state.get("last_predicted_player")
+                with st.spinner("Loading players from Neo4j (real-time)..."):
+                    df_source = fetch_players_from_neo4j_for_graph(
+                        neo4j_uri,
+                        neo4j_username,
+                        neo4j_password,
+                        n_players,
+                        selected_positions if selected_positions else [],
+                        focus_name=focus_name
+                    )
+                if df_source.empty:
+                    st.warning("Tidak ada data pemain di Neo4j yang cocok dengan filter. Menggunakan dataset CSV sebagai fallback.")
+                    df_source = df.copy()
+            except Exception as e:
+                st.error(f"Gagal mengambil data dari Neo4j: {e}")
+                st.info("Menggunakan dataset CSV offline sebagai fallback.")
+                df_source = df.copy()
         else:
-            df_filtered = df.head(n_players)
+            df_source = df.copy()
+        
+        # 🔽 NEW: terapkan sorting ke df_source
+        if not df_source.empty:
+            if sort_option == "Name (A–Z)":
+                df_source = df_source.sort_values(by="full_name")
+            elif sort_option == "Position":
+                df_source = df_source.sort_values(by=["primary_position", "full_name"])
+            else:  # Random
+                df_source = df_source.sample(frac=1, random_state=None).reset_index(drop=True)
+        
+        # Filter posisi + limit jumlah pemain
+        if selected_positions:
+            df_filtered = df_source[df_source['primary_position'].isin(selected_positions)].head(n_players)
+        else:
+            df_filtered = df_source.head(n_players)
         
         if len(df_filtered) < 2:
             st.warning("Please select at least 2 players to visualize the graph.")
         else:
             with st.spinner("Generating interactive graph..."):
                 if graph_type == "Position Clusters":
-                    # Create position-based network
                     G = nx.Graph()
-                    
-                    # Add nodes for each player
                     for idx, row in df_filtered.iterrows():
                         G.add_node(
                             row['full_name'],
-                            title=f"{row['full_name']}<br>Position: {row['primary_position']}<br>Age: {int(row['age'])}",
+                            title=f"{row['full_name']}<br>Position: {row['primary_position']}<br>Age: {int(row['age']) if not pd.isna(row['age']) else 'N/A'}",
                             group=row['primary_position'],
                             value=10
                         )
-                    
-                    # Add edges between players of same position
                     positions = df_filtered['primary_position'].unique()
                     for pos in positions:
                         players_in_pos = df_filtered[df_filtered['primary_position'] == pos]['full_name'].tolist()
@@ -568,25 +741,17 @@ with tab2:
                                 G.add_edge(p1, p2, weight=2)
                 
                 elif graph_type == "Player Similarity":
-                    # Create similarity-based network using embeddings
                     G = nx.Graph()
-                    
-                    # Get embeddings
                     embeddings = np.array(df_filtered['embedding'].tolist())
-                    
-                    # Add nodes
                     for idx, row in df_filtered.iterrows():
                         G.add_node(
                             row['full_name'],
-                            title=f"{row['full_name']}<br>Position: {row['primary_position']}<br>Age: {int(row['age'])}",
+                            title=f"{row['full_name']}<br>Position: {row['primary_position']}<br>Age: {int(row['age']) if not pd.isna(row['age']) else 'N/A'}",
                             group=row['primary_position'],
                             value=10
                         )
-                    
-                    # Calculate similarity and add edges
                     from sklearn.metrics.pairwise import cosine_similarity
                     similarities = cosine_similarity(embeddings)
-                    
                     for i in range(len(df_filtered)):
                         for j in range(i+1, len(df_filtered)):
                             sim = similarities[i][j]
@@ -598,45 +763,32 @@ with tab2:
                                     title=f"Similarity: {sim:.2f}"
                                 )
                 
-                else:  # Position Hierarchy
-                    # Create hierarchical network by position groups
+                else:
                     G = nx.DiGraph()
-                    
-                    # Define position hierarchy
                     hierarchy = {
                         'Attack': ['ST', 'CF', 'LW', 'RW'],
                         'Midfield': ['CAM', 'CM', 'CDM', 'LM', 'RM'],
                         'Defense': ['CB', 'LB', 'RB', 'LWB', 'RWB'],
                         'Goalkeeper': ['GK']
                     }
-                    
-                    # Add category nodes
                     for category in hierarchy.keys():
                         G.add_node(category, title=category, group=category, value=30, shape='box')
-                    
-                    # Add player nodes and connect to categories
                     for idx, row in df_filtered.iterrows():
                         pos = row['primary_position']
                         player_name = row['full_name']
-                        
                         G.add_node(
                             player_name,
-                            title=f"{player_name}<br>Position: {pos}<br>Age: {int(row['age'])}",
+                            title=f"{player_name}<br>Position: {pos}<br>Age: {int(row['age']) if not pd.isna(row['age']) else 'N/A'}",
                             group=pos,
                             value=10
                         )
-                        
-                        # Connect to appropriate category
                         for category, positions in hierarchy.items():
                             if pos in positions:
                                 G.add_edge(category, player_name)
                                 break
                 
-                # Create PyVis network
                 net = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="#1a6b3d")
                 net.from_nx(G)
-                
-                # Customize physics
                 net.set_options("""
                 {
                     "physics": {
@@ -669,22 +821,14 @@ with tab2:
                 }
                 """)
                 
-                # Save and display
                 try:
-                    # Create temp file
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='w', encoding='utf-8') as f:
                         net.save_graph(f.name)
                         temp_file = f.name
-                    
-                    # Read and display
                     with open(temp_file, 'r', encoding='utf-8') as f:
                         html_content = f.read()
-                    
                     st.components.v1.html(html_content, height=620)
-                    
-                    # Cleanup
                     os.unlink(temp_file)
-                    
                 except Exception as e:
                     st.error(f"Error generating graph: {str(e)}")
                     st.info("Try reducing the number of players or adjusting filters.")
@@ -693,7 +837,10 @@ with tab2:
         st.markdown("#### Graph Statistics")
         col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
-            st.metric("Total in Dataset", len(df))
+            if data_source == "Neo4j (Real-Time)" and enable_neo4j:
+                st.metric("Total (Neo4j sample)", len(df_source))
+            else:
+                st.metric("Total in Dataset (CSV)", len(df))
         with col_b:
             st.metric("Displayed Players", len(df_filtered))
         with col_c:
@@ -726,15 +873,11 @@ with tab3:
     with col2:
         st.markdown("#### Age Distribution by Position")
         fig, ax = plt.subplots(figsize=(10, 6))
-        
-        # Get top positions
         top_positions = df['primary_position'].value_counts().head(5).index
         df_top = df[df['primary_position'].isin(top_positions)]
-        
         for pos in top_positions:
             ages = df_top[df_top['primary_position'] == pos]['age']
             ax.hist(ages, alpha=0.5, label=pos, bins=15)
-        
         ax.set_xlabel("Age", fontweight='bold')
         ax.set_ylabel("Frequency", fontweight='bold')
         ax.set_title("Age Distribution (Top 5 Positions)", fontweight='bold')
@@ -749,11 +892,9 @@ with tab3:
     with col3:
         st.markdown("#### Attribute Correlation Heatmap")
         fig, ax = plt.subplots(figsize=(10, 8))
-        
         corr_cols = ['age', 'acceleration', 'sprint_speed', 'dribbling', 
                      'short_passing', 'finishing', 'stamina', 'strength']
         corr_matrix = df[corr_cols].corr()
-        
         sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='RdYlGn', 
                    center=0, ax=ax, cbar_kws={'label': 'Correlation'})
         ax.set_title("Attribute Correlation Matrix", fontweight='bold')
@@ -762,31 +903,21 @@ with tab3:
     
     with col4:
         st.markdown("#### Average Stats by Position")
-        
-        # Calculate average stats per position
         stats_by_pos = df.groupby('primary_position')[stats_cols].mean()
-        
-        # KODE BARU (AMAN)
-# Tambahkan .dropna() lagi di sini
         selected_pos = st.selectbox("Select Position", sorted(df['primary_position'].dropna().unique()))
         if selected_pos in stats_by_pos.index:
             stats = stats_by_pos.loc[selected_pos]
-            
             fig, ax = plt.subplots(figsize=(10, 8))
             y_pos = np.arange(len(stats))
             colors_bar = plt.cm.viridis(stats / 100)
-            
             ax.barh(y_pos, stats, color=colors_bar)
             ax.set_yticks(y_pos)
             ax.set_yticklabels(stats.index)
             ax.set_xlabel('Average Value', fontweight='bold')
             ax.set_title(f'Average Stats for {selected_pos}', fontweight='bold')
             ax.set_xlim(0, 100)
-            
-            # Add value labels
             for i, v in enumerate(stats):
                 ax.text(v + 1, i, f'{v:.1f}', va='center', fontweight='bold')
-            
             plt.tight_layout()
             st.pyplot(fig)
     
@@ -794,8 +925,6 @@ with tab3:
     st.markdown("#### Dataset Overview")
     
     col6, col7, col8 = st.columns(3)
-    # with col5:
-    #     st.metric("Total Players", len(df))
     with col6:
         st.metric("Unique Positions", df['primary_position'].nunique())
     with col7:
@@ -805,7 +934,4 @@ with tab3:
     
     st.markdown("#### Sample Data")
     display_cols = ['full_name', 'positions', 'primary_position'] + stats_cols
-    st.dataframe(
-        df[display_cols].head(20),
-        use_container_width=True
-    )
+    st.dataframe(df[display_cols].head(20), use_container_width=True)
