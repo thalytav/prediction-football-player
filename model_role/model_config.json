@@ -34,7 +34,7 @@
     "normalized_stats": true,
     "domain_features": true
   },
-  "trained_at": "2025-12-11T11:56:24.418272",
+  "trained_at": "2025-12-16T22:04:08.537318",
   "total_features": 82,
   "total_samples": 3993,
   "classes": [

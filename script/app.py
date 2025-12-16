@@ -579,34 +579,34 @@ with tab1:
                     st.warning("Player prediction completed but Neo4j insertion failed.")
 
     with col2:
-        # st.markdown("### Informasi Sistem")
+        st.markdown("### Informasi Sistem")
 
-        # # ambil config model
-        # try:
-        #     script_dir = os.path.dirname(os.path.abspath(__file__))
-        #     config_path = os.path.normpath(os.path.join(script_dir, '..', 'model', 'model_config.json'))
-        #     with open(config_path, 'r') as f:
-        #         current_config = json.load(f)
-        # except:
-        #     current_config = config
+        # ambil config model
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.normpath(os.path.join(script_dir, '..', 'model', 'model_config.json'))
+            with open(config_path, 'r') as f:
+                current_config = json.load(f)
+        except:
+            current_config = config
 
-        # acc_key = "accuracy" if "accuracy" in current_config else "accuracy_top1"
-        # acc_val = current_config.get(acc_key, 0.0)
+        acc_key = "accuracy" if "accuracy" in current_config else "accuracy_top1"
+        acc_val = current_config.get(acc_key, 0.0)
 
-        # # Model 1 pakai expander
-        # with st.expander("Model 1 — Primary Position (15 kelas)", expanded=True):
-        #     st.markdown("**Algorithm:** Random Forest")
-        #     st.markdown(f"**Test Accuracy:** {acc_val:.2%}")
-        #     st.markdown(f"**CV Score:** {current_config.get('cv_score', 0.0):.2%}")
+        # Model 1 pakai expander
+        with st.expander("Model 1 — Primary Position (15 kelas)", expanded=True):
+            st.markdown("**Algorithm:** Random Forest")
+            st.markdown(f"**Test Accuracy:** {acc_val:.2%}")
+            st.markdown(f"**CV Score:** {current_config.get('cv_score', 0.0):.2%}")
 
-        # # Model 2 pakai expander
-        # with st.expander("Model 2 — Role (4 kelas)", expanded=True):
-        #     st.markdown("**Algorithm:** Random Forest")
-        #     st.markdown(
-        #         f"**Test Accuracy:** "
-        #         f"{config_role.get('accuracy', config_role.get('accuracy_top1', 0.0)):.2%}"
-        #     )
-        #     st.markdown(f"**CV Score:** {config_role.get('cv_score', 0.0):.2%}")
+        # Model 2 pakai expander
+        with st.expander("Model 2 — Role (4 kelas)", expanded=True):
+            st.markdown("**Algorithm:** Random Forest")
+            st.markdown(
+                f"**Test Accuracy:** "
+                f"{config_role.get('accuracy', config_role.get('accuracy_top1', 0.0)):.2%}"
+            )
+            st.markdown(f"**CV Score:** {config_role.get('cv_score', 0.0):.2%}")
 
         # ----- Kamus Posisi (tetap seperti sebelumnya) -----
         st.markdown("### Kamus Posisi")
